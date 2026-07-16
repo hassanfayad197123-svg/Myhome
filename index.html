@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NodeMCU">
+  <meta name="theme-color" content="#667eea">
+  
+  <title>NodeMCU Control</title>
+  
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    .status {
+      text-align: center;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    
+    .status.connected {
+      background: #4CAF50;
+      color: white;
+    }
+    
+    .status.disconnected {
+      background: #f44336;
+      color: white;
+    }
+    
+    .led-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .led-card {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 15px;
+      text-align: center;
+    }
+    
+    .led-card h3 {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    
+    .led-status {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: white;
+    }
+    
+    .btn-on { background: #4CAF50; }
+    .btn-off { background: #f44336; }
+    
+    button:active { transform: scale(0.95); }
+    
+    input[type="range"] {
+      width: 100%;
+      margin-top: 10px;
+    }
+    
+    .settings {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .button-group button {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 NodeMCU</h1>
+    
+    <div class="status disconnected" id="status">
+      ❌ جاري الاتصال...
+    </div>
+    
+    <div class="led-container">
+      <!-- LED1 -->
+      <div class="led-card">
+        <h3>🔵 LED 1</h3>
+        <div class="led-status" id="led1">OFF</div>
+        <button class="btn-on" onclick="send('led1:on')">تشغيل</button>
+        <button class="btn-off" onclick="send('led1:off')">إيقاف</button>
+        <input type="range" min="0" max="1023" value="1023" oninput="send('led1_brightness:' + this.value)">
+      </div>
+      
+      <!-- LED2 -->
+      <div class="led-card">
+        <h3>🟡 LED 2</h3>
+        <div class="led-status" id="led2">OFF</div>
+        <button class="btn-on" onclick="send('led2:on')">تشغيل</button>
+        <button class="btn-off" onclick="send('led2:off')">إيقاف</button>
+        <input type="range" min="0" max="1023" value="1023" oninput="send('led2_brightness:' + this.value)">
+      </div>
+    </div>
+    
+    <div class="settings">
+      <h4 style="margin-bottom: 10px;">⚙️ الإعدادات</h4>
+      <input type="text" id="ip" value="192.168.4.1" placeholder="عنوان IP">
+      <div class="button-group">
+        <button class="btn-on" onclick="saveIP()">حفظ</button>
+        <button class="btn-off" onclick="reconnect()">إعادة اتصال</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws, ip = localStorage.getItem('ip') || '192.168.4.1';
+    
+    function connect() {
+      try {
+        ws = new WebSocket(`ws://${ip}:81`);
+        
+        ws.onopen = () => {
+          document.getElementById('status').className = 'status connected';
+          document.getElementById('status').textContent = '✅ متصل';
+        };
+        
+        ws.onmessage = (e) => {
+          if (e.data.includes('led1:on')) document.getElementById('led1').textContent = 'ON';
+          if (e.data.includes('led1:off')) document.getElementById('led1').textContent = 'OFF';
+          if (e.data.includes('led2:on')) document.getElementById('led2').textContent = 'ON';
+          if (e.data.includes('led2:off')) document.getElementById('led2').textContent = 'OFF';
+        };
+        
+        ws.onclose = () => {
+          document.getElementById('status').className = 'status disconnected';
+          document.getElementById('status').textContent = '❌ غير متصل';
+          setTimeout(connect, 3000);
+        };
+      } catch (e) {
+        setTimeout(connect, 3000);
+      }
+    }
+    
+    function send(cmd) {
+      if (ws && ws.readyState === 1) ws.send(cmd);
+      else alert('غير متصل');
+    }
+    
+    function saveIP() {
+      ip = document.getElementById('ip').value;
+      localStorage.setItem('ip', ip);
+      reconnect();
+    }
+    
+    function reconnect() {
+      if (ws) ws.close();
+      setTimeout(connect, 500);
+    }
+    
+    window.addEventListener('load', () => {
+      document.getElementById('ip').value = ip;
+      connect();
+    });
+  </script>
+</body>
+</html>
